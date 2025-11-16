@@ -1,5 +1,7 @@
 library(tidyverse)
 
+### PREPROCESSING ###
+
 # Load & explore data
 df <- read.csv("Employee Attrition.csv")
 str(df)
@@ -44,10 +46,26 @@ for (col in names(numeric_vars)) {
           ylab = col)
 }
 
-# 7. Train-test split
+# Train-test split
 set.seed(123)
 train_index <- sample(1:nrow(df), 0.8 * nrow(df))
 train <- df[train_index, ]
 test  <- df[-train_index, ]
 nrow(train)
 nrow(test)
+
+
+
+### CART MODEL ###
+
+
+
+
+### CIT MODEL ###
+
+
+
+
+### EVALUATION ###
+
+
