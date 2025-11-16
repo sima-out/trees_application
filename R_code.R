@@ -45,6 +45,7 @@ for (col in names(numeric_vars)) {
           col = "skyblue",
           ylab = col)
 }
+par(mfrow=c(1,1))
 
 # Train-test split
 set.seed(123)
@@ -57,8 +58,25 @@ nrow(test)
 
 
 ### CART MODEL ###
+library(rpart)
+library(rpart.plot)
 
+# Fit regression tree on training data
+cart_tree <- rpart(satisfaction_level ~ .,
+                  data = train,
+                  method = "anova") # rpart automatically prune the tree using 10-fold CV
+plotcp(cart_tree) # complexity parameter plot
+summary(cart_tree)
 
+# Visualize the regression tree
+rpart.plot(cart_tree,
+           type = 3, fallen.leaves = TRUE,
+           digits = 3,
+           main = "Regression Tree for Predicting Employee Satisfaction")
+
+# Predict satisfaction on test data
+cart_pred <- predict(cart_tree, newdata = test)
+head(cart_pred)
 
 
 ### CIT MODEL ###
@@ -67,5 +85,10 @@ nrow(test)
 
 
 ### EVALUATION ###
+# CART MAE, RMSE, R-squared
+cart_mae  <- MAE(cart_pred, test$satisfaction_level)
+cart_rmse <- RMSE(cart_pred, test$satisfaction_level)
+cart_r2   <- R2(cart_pred, test$satisfaction_level)
+
 
 
