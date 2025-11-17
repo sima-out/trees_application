@@ -80,11 +80,38 @@ head(cart_pred)
 
 
 ### CIT MODEL ###
+# install.packages("partykit")
+library(partykit)
 
+#very messy tree
+c_tree <- ctree(satisfaction_level ~ .,
+                data = train)
+plot(c_tree, 
+     main = "Conditional Inference Tree for Predicting Employee Satisfaction",
+     tp_args = list(col = "blue", cex = 0.6))
 
+# cleaner but lacks depth
+limit_c_tree <- ctree(satisfaction_level ~ ., 
+                data = train, 
+                control = ctree_control(maxdepth = 3))
+plot(limit_c_tree, 
+     main = "Conditional Inference Tree for Predicting Employee Satisfaction",
+     tp_args = list(col = "blue", cex = 0.6))
 
+#prediction
+c_tree_pred <- predict(c_tree, newdata = test)
+head(c_tree_pred)
 
 ### EVALUATION ###
+# 10 fold cross validation
+
+library(caret)
+cv <- trainControl(method = "cv", number = 10)
+
+c_tree_cv <- train(satisfaction_level ~ ., data = train, method = "ctree",
+                   trControl = cv)
+c_tree_cv
+
 # CART MAE, RMSE, R-squared
 cart_mae  <- MAE(cart_pred, test$satisfaction_level)
 cart_rmse <- RMSE(cart_pred, test$satisfaction_level)
