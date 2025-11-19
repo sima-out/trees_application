@@ -1,4 +1,5 @@
 library(tidyverse)
+library(dplyr)
 
 ### PREPROCESSING ###
 
@@ -23,13 +24,13 @@ df$salary <- factor(df$salary, levels = c("low", "medium", "high"), ordered = TR
 
 ### TRANSFORM SATISFACTION VARIABLE INTO CATEGORICAL ###
 # Burnout = 0.00–0.60, Happy = 0.61–1.00
-# df$satisfaction_cat <- ifelse(df$satisfaction_level <= 0.60, "burnout", "happy")
+df$satisfaction_cat <- ifelse(df$satisfaction_level <= 0.65, "quit", "no quit")
 
-df$satisfaction_cat <- cut(
-  df$satisfaction_level,
-  breaks = c(-Inf, 0.60, 0.90, 1),
-  labels = c("very_low", "medium", "high"),
-  include.lowest = TRUE
+#df$satisfaction_cat <- cut(
+#  df$satisfaction_level,
+#  breaks = c(-Inf, 0.65, 1),
+#  labels = c( "medium", "high"),
+# include.lowest = TRUE
 )
 
 df$satisfaction_cat <- as.factor(df$satisfaction_cat)
@@ -65,7 +66,7 @@ par(mfrow=c(1,1))
 
 # Train-test split
 # regression
-df_reg <- df %>% select(-satisfaction_cat)
+df_reg <- df %>% dplyr::select(-satisfaction_cat)
 set.seed(123)
 train_index <- sample(1:nrow(df_reg), 0.8 * nrow(df_reg))
 train <- df_reg[train_index, ]
@@ -74,73 +75,87 @@ nrow(train)
 nrow(test)
 
 # classification
-df_class <- df %>% select(-satisfaction_level)
+df_class <- df %>% dplyr::select(-satisfaction_level)
 set.seed(123)
 class_index <- sample(1:nrow(df_class), 0.8*nrow(df_class))
 train_class <- df_class[class_index, ]
 test_class  <- df_class[-class_index, ]
 
+### CIT REGRESSION ###
+library(partykit)
+library(caret)
 
+# Regression CIT
+cit_reg <- ctree(
+  satisfaction_level ~ .,
+  data = train, 
+  control = ctree_control(maxdepth = 3)
+)
 
-### CART MODEL ###
+plot(cit_reg,
+     main = "CIT Regression Tree – Predicting Satisfaction Level")
+
+# Predict on test
+cit_reg_pred <- predict(cit_reg, newdata = test)  # numeric
+
+# Evaluate regression performance
+cit_reg_rmse <- RMSE(cit_reg_pred, test$satisfaction_level)
+cit_reg_mae  <- MAE(cit_reg_pred,  test$satisfaction_level)
+cit_reg_r2   <- R2(cit_reg_pred,   test$satisfaction_level)
+
+cit_reg_rmse
+cit_reg_mae
+cit_reg_r2
+
+### CIT CLASSIFICATION ###
+set.seed(123)
+cit_clf <- ctree(
+  satisfaction_cat ~ last_evaluation + number_project + average_montly_hours +
+    time_spend_company + Work_accident + promotion_last_5years + dept + salary,
+  data = train_class,
+  control = ctree_control(maxdepth = 3)
+)
+
+plot(cit_clf,
+     main = "CIT Classification Tree – Unlikely to Quit/Likely to Quit")
+
+# Predict on test (factor output)
+cit_clf_pred <- predict(cit_clf, newdata = test, type = "response")
+
+# Evaluation
+cit_clf_cm <- confusionMatrix(cit_clf_pred, test_class$satisfaction_cat)
+cit_clf_cm
+
+### CART for classification ###
 library(rpart)
 library(rpart.plot)
 
-# Fit regression tree on training data
-cart_tree <- rpart(satisfaction_level ~ .,
-                  data = train,
-                  method = "anova") # rpart automatically prune the tree using 10-fold CV
-plotcp(cart_tree) # complexity parameter plot
-summary(cart_tree)
+# Grow CART classification tree
+set.seed(123)
+cart_clf <- rpart(
+  satisfaction_cat ~ last_evaluation + number_project + average_montly_hours +
+    time_spend_company + Work_accident + promotion_last_5years + dept + salary,
+  data   = train_class,
+  method = "class",
+  control = rpart.control(cp = 0.01, minsplit = 10, minbucket = 5, maxdepth = 5)
+)
 
-# Visualize the regression tree
-rpart.plot(cart_tree,
-           type = 3, fallen.leaves = TRUE,
-           digits = 3,
-           main = "Regression Tree for Predicting Employee Satisfaction")
+# Check CP table & prune
+printcp(cart_clf)
+best_cp <- cart_clf$cptable[which.min(cart_clf$cptable[, "xerror"]), "CP"]
+cart_clf_pruned <- prune(cart_clf, cp = best_cp)
 
-# Predict satisfaction on test data
-cart_pred <- predict(cart_tree, newdata = test)
-head(cart_pred)
+# Visualize pruned tree
+rpart.plot(
+  cart_clf_pruned,
+  fallen.leaves = TRUE,
+  digits = 3,
+  main = "CART Classification Tree – Unlikely to Quit/Likely to Quit"
+)
 
+# Predict on test (classes)
+cart_clf_pred <- predict(cart_clf_pruned, newdata = test, type = "class")
 
-### CIT MODEL ###
-# install.packages("partykit")
-library(partykit)
-
-#very messy tree
-c_tree <- ctree(satisfaction_level ~ .,
-                data = train)
-plot(c_tree, 
-     main = "Conditional Inference Tree for Predicting Employee Satisfaction",
-     tp_args = list(col = "blue", cex = 0.6))
-
-# cleaner but lacks depth
-limit_c_tree <- ctree(satisfaction_level ~ ., 
-                data = train, 
-                control = ctree_control(maxdepth = 3))
-plot(limit_c_tree, 
-     main = "Conditional Inference Tree for Predicting Employee Satisfaction",
-     tp_args = list(col = "blue", cex = 0.6))
-
-#prediction
-c_tree_pred <- predict(c_tree, newdata = test)
-head(c_tree_pred)
-
-### EVALUATION ###
-# 10 fold cross validation
-
-library(caret)
-cv <- trainControl(method = "cv", number = 10)
-
-c_tree_cv <- train(satisfaction_level ~ ., data = train, method = "ctree",
-                   trControl = cv)
-c_tree_cv
-
-# CART MAE, RMSE, R-squared
-cart_mae  <- MAE(cart_pred, test$satisfaction_level)
-cart_rmse <- RMSE(cart_pred, test$satisfaction_level)
-cart_r2   <- R2(cart_pred, test$satisfaction_level)
-
-
-
+# Evaluate
+cart_clf_cm <- confusionMatrix(cart_clf_pred, test_class$satisfaction_cat)
+cart_clf_cm
