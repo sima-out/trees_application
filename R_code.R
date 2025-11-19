@@ -21,6 +21,22 @@ df$promotion_last_5years <- as.factor(df$promotion_last_5years)
 df$dept <- as.factor(df$dept)
 df$salary <- factor(df$salary, levels = c("low", "medium", "high"), ordered = TRUE)
 
+### TRANSFORM SATISFACTION VARIABLE INTO CATEGORICAL ###
+# Burnout = 0.00–0.60, Happy = 0.61–1.00
+# df$satisfaction_cat <- ifelse(df$satisfaction_level <= 0.60, "burnout", "happy")
+
+df$satisfaction_cat <- cut(
+  df$satisfaction_level,
+  breaks = c(-Inf, 0.60, 0.90, 1),
+  labels = c("very_low", "medium", "high"),
+  include.lowest = TRUE
+)
+
+df$satisfaction_cat <- as.factor(df$satisfaction_cat)
+
+table(df$satisfaction_cat)  # check class balance
+#hist(df$satisfaction_level, breaks = 20)
+
 # Exploratory Data Analysis
 hist(df$satisfaction_level, 
      main="Satisfaction Level Distribution", col="skyblue")
@@ -48,12 +64,21 @@ for (col in names(numeric_vars)) {
 par(mfrow=c(1,1))
 
 # Train-test split
+# regression
+df_reg <- df %>% select(-satisfaction_cat)
 set.seed(123)
-train_index <- sample(1:nrow(df), 0.8 * nrow(df))
-train <- df[train_index, ]
-test  <- df[-train_index, ]
+train_index <- sample(1:nrow(df_reg), 0.8 * nrow(df_reg))
+train <- df_reg[train_index, ]
+test  <- df_reg[-train_index, ]
 nrow(train)
 nrow(test)
+
+# classification
+df_class <- df %>% select(-satisfaction_level)
+set.seed(123)
+class_index <- sample(1:nrow(df_class), 0.8*nrow(df_class))
+train_class <- df_class[class_index, ]
+test_class  <- df_class[-class_index, ]
 
 
 
